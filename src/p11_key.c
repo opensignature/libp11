@@ -18,6 +18,7 @@
  */
 
 #include "libp11-int.h"
+#include "engine.h"
 #include <string.h>
 #include <openssl/ui.h>
 #include <openssl/bn.h>
@@ -28,6 +29,29 @@
 
 /* The maximum length of PIN */
 #define MAX_PIN_LENGTH   32
+
+typedef struct st_engine_ctx ENGINE_CTX2;
+struct st_engine_ctx {
+        char *pin;
+        size_t pin_length;
+        int verbose;
+        char *module;
+        char *init_args;
+        UI_METHOD *ui_method;
+        void *callback_data;
+        int force_login;
+        /* Engine initialization mutex */
+#if OPENSSL_VERSION_NUMBER >= 0x10100004L && !defined(LIBRESSL_VERSION_NUMBER)
+        CRYPTO_RWLOCK *rwlock;
+#else
+        int rwlock;
+#endif
+
+        /* Current operations */
+        PKCS11_CTX *pkcs11_ctx;
+        PKCS11_SLOT *slot_list;
+        unsigned int slot_count;
+};
 
 static int pkcs11_find_keys(PKCS11_TOKEN *, unsigned int);
 static int pkcs11_next_key(PKCS11_CTX *ctx, PKCS11_TOKEN *token,
@@ -361,6 +385,7 @@ int pkcs11_authenticate(PKCS11_KEY *key)
 	char* prompt;
 	UI *ui;
 	int rv;
+        ENGINE *e = NULL;
 
 	/* Handle CKF_PROTECTED_AUTHENTICATION_PATH */
 	if (token->secureLogin) {
@@ -370,7 +395,11 @@ int pkcs11_authenticate(PKCS11_KEY *key)
 	}
 
         e = ENGINE_by_id("pkcs11");
-        ctxengine = get_ctx(e);
+
+        ENGINE_CTX2 *ctxengine = malloc(sizeof(ENGINE_CTX2));
+        ctxengine = ENGINE_get_ex_data(e, 1);
+        if (!ctxengine)
+            ctxengine = ENGINE_get_ex_data(e, 0);
 
         if (ctxengine->pin != NULL) {
                 rv = CRYPTOKI_call(ctx,
