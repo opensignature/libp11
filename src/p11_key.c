@@ -397,11 +397,14 @@ int pkcs11_authenticate(PKCS11_KEY *key)
         e = ENGINE_by_id("pkcs11");
 
         ENGINE_CTX2 *ctxengine = malloc(sizeof(ENGINE_CTX2));
-        ctxengine = ENGINE_get_ex_data(e, 1);
-        if (!ctxengine)
+        ctxengine = ENGINE_get_ex_data(e, 2);
+        if (ctxengine == NULL)
+            ctxengine = ENGINE_get_ex_data(e, 1);
+
+        if (ctxengine == NULL)
             ctxengine = ENGINE_get_ex_data(e, 0);
 
-        if (ctxengine->pin != NULL) {
+        if (ctxengine != NULL && ctxengine->pin != NULL) {
                 rv = CRYPTOKI_call(ctx,
                                    C_Login(spriv->session, CKU_CONTEXT_SPECIFIC,
                                    (CK_UTF8CHAR *)ctxengine->pin, strlen(ctxengine->pin)));
